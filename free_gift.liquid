@@ -1,0 +1,135 @@
+
+<script src="https://unpkg.com/vue@3"></script>
+
+  {%raw%}
+          <div id="app">
+    <div v-if="cartTotal<10000" class="row full-width checkout-promo-bar">
+      <i class="fa fa-exclamation-circle fa-lg" aria-hidden="true"></i> Spend <span>{{ (10000-cartTotal)/100 }} €</span> more to get a free gift.
+    </div>
+    <div v-else class="row full-width checkout-promo-bar">
+      <div v-if="giftAlreadyInCart">
+    <i class="fa fa-gift fa-lg" aria-hidden="true"></i> Your free gift has been added to your order.
+      </div>
+      <div v-else>
+    <i class="fa fa-gift fa-lg" aria-hidden="true"></i> Awesome! You're now eligible for a free gift. 
+      <p class="pick_gift_heading">Pick your gift now <i class="fa fa-angle-down fa-lg"></i></p>
+        <div class="row">
+      <div class="results">
+        <div class="column" @click="addToCart(item.handle)" v-for="item in items">
+          <img class="" width="100" height="100" :src="item.image">
+          <p class="gift-title">{{ item.title }}</p>
+        </div>
+      </div>
+        </div>
+
+    </div>
+    </div>
+          </div>
+
+{% endraw %}
+
+<script type="text/javascript">
+  const { createApp } = Vue
+
+  createApp({
+    data() {
+      return {
+        loading: true,
+        giftAlreadyInCart: false,
+        items:[],
+        cartTotal: 0,
+      }
+    },
+    created(){
+      this.getCart()
+      this.getFreeGifts()
+      this.listenForChangesInCart();
+    },
+    methods:{
+      getFreeGifts(){
+        fetch(window.Shopify.routes.root + "search/suggest.json?q=free_gif&resources[type]=product&resources[options][unavailable_products]=hide&resources[options][fields]=tag")
+  .then((response) => response.json())
+  .then((suggestions) => {
+    const productSuggestions = suggestions.resources.results.products;
+    if (productSuggestions.length > 0) {
+      this.items = productSuggestions
+    }else console.log('Nothing found')
+  });
+      },
+      getCart(){
+        fetch(window.Shopify.routes.root + 'cart.json')
+        .then((response) => response.json())
+        .then((cart) => {
+          this.cartTotal = cart.items_subtotal_price;
+          this.giftAlreadyInCart=false;
+          cart.items.forEach((item) => {
+            this.getProductInformation(item.handle).then((product) =>{
+              if (product.tags.includes("free_gift")) this.giftAlreadyInCart=true;
+            });
+          });
+
+        });
+      },
+      listenForChangesInCart(){
+        this.freeGiftIsAlreadyInCart=true;
+        const that = this;
+         document.addEventListener('change', function(){
+          setTimeout(() => {
+          that.getCart();
+        }, 1000)
+          
+        }); 
+},
+addToCart(handle){
+  this.getProductInformation(handle).then((product) =>{
+        let formData = {
+ 'items': [{
+  'id': product.variants[0].id,
+  'quantity': 1
+  }]
+};
+fetch(window.Shopify.routes.root + 'cart/add.js', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify(formData)
+})
+.then(response => {
+  this.giftAlreadyInCart=true;
+  let cartItems = new CartItems()
+  cartItems?.updateQuantity(1, 1, "")
+  return response.json();
+})
+.catch((error) => {
+  console.error('Error:', error);
+});
+  });
+  
+  },
+    getProductInformation(handle){
+      return new Promise(function(resolve, reject) {
+      fetch(window.Shopify.routes.root + `products/${handle}.js`)
+      .then((response) => response.json())
+      .then((product) => {
+      resolve(product);
+    });
+    });
+}
+  }
+  }).mount('#app');
+
+function clearCart(){
+  fetch(window.Shopify.routes.root + 'cart/clear.js', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json'
+  }
+})
+.then(response => {
+  console.log(response.json());
+})
+}
+
+
+</script>
